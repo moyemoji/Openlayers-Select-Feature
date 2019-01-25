@@ -1,0 +1,56 @@
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+.map {
+    height: 100%;
+    width: 100%;
+}
+
+.buttons-container {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.button button {
+    display: inline-block;
+    font-size: 1.14em;
+    width: 1.375em;
+    height: 1.375em;
+    margin: 1px;
+    outline: none;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    background-color: rgba(0, 60, 136, .5);
+    border-radius: 2px;
+}
+
+.button button:hover{
+    background-color: rgba(0,60,136,.7)
+}
+
+#selectedInfoContent {
+    position: absolute;
+    width: 100%;
+    bottom: 0px;
+    padding: 50px 80px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.selectedItem {
+    display: inline-block;
+    padding: 5px 10px;
+    font-size: 18pt;
+    color: #fff;
+    text-shadow: 0 0 10px #000;
+}

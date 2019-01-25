@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!--引入openlayers的css-->
+    <link rel="stylesheet" href="./css/ol.css" type="text/css" />
+    <!--引入openlayers的js-->
+    <script src="./build/ol.js"></script>
+    <script src="./resource/city.js"></script>
+    <link rel="stylesheet" href="./resource/index.css" type="text/css" />
+  </head>
+
+  <body>
+    <!-- 地图 -->
+    <div id="map" class="map"></div>
+    <!-- 右侧控制按钮 -->
+    <ul class="buttons-container">
+      <li class="button">
+        <button id="circle_select" onclick="selectSomething('circle')">
+          C
+        </button>
+      </li>
+      <li class="button">
+        <button id="polygon_select" onclick="selectSomething('polygon')">
+          P
+        </button>
+      </li>
+    </ul>
+    <!-- 显示选中的元素 -->
+    <div id="selectedInfoContent"></div>
+
+    <script type="text/javascript">
+      // 加载OSM底图
+      var map = new ol.Map({
+        target: "map",
+        layers: [
+          //   new ol.layer.Tile({
+          //     source: new ol.source.OSM()
+          //   })
+          new ol.layer.Tile({
+            source: new ol.source.XYZ({
+              url:
+                "http://webrd03.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scale=1&style=8" //高德地图在线
+            }),
+            projection: "EPSG:3857"
+          })
+        ],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([114.35, 30.55]),
+          zoom: 5
+        })
+      });
+
+      // 加载GeoJSON
+      var vectorSource = new ol.source.Vector({
+        features: new ol.format.GeoJSON().readFeatures(geojsonObject)
+      });
+      var vectorLayer = new ol.layer.Vector({
+        source: vectorSource
+      });
+      // 绘制矢量图层
+      map.addLayer(vectorLayer);
+
+      // 选中的对象
+      var selectedFeatures = [];
+      var selectedStyle = new ol.style.Style({
+        image: new ol.style.Circle({
+          radius: 10,
+          fill: new ol.style.Fill({
+            color: "#ff0000"
+          }),
+          stroke: new ol.style.Stroke({
+            color: "#ff0000",
+            width: 2
+          })
+        })
+      });
+
+      // 图形绘制类
+      var selectShapes = {
+        circle: new ol.interaction.Draw({
+          //   source: vectorSource,  // 绘制在哪个图层
+          type: "Circle"
+        }),
+        polygon: new ol.interaction.Draw({
+          type: "Polygon"
+        })
+      };
+
+      /**
+       * 选择要素
+       * @param shape 选择的形状
+       * 根据形状，将选中元素高亮且获取对应属性
+       * */
+      var selectSomething = function(shape) {
+        var features = vectorLayer.getSource().getFeatures();
+        // 重置元素样式
+        for (var i = 0; i < features.length; i++) {
+          features[i].setStyle(null);
+        }
+        // 声明图形绘制类
+        var select_shape = selectShapes[shape];
+        // 添加一个交互绘制类，开始绘制
+        map.addInteraction(select_shape);
+        select_shape.on("drawend", function(evt) {
+          // 绘制后得到绘制的图形
+          var geometry = evt.feature.getGeometry();
+
+          // 获取选中要素数组
+          switch (shape) {
+            case "circle": // 圈选
+              selectedFeatures = circleSelect(vectorLayer, geometry);
+              break;
+            case "polygon": // 多边形选
+              selectedFeatures = polygonSelect(vectorLayer, geometry);
+              break;
+          }
+          // 将选中要素的属性显示在界面上
+          var str = "";
+          for (var i = 0; i < selectedFeatures.length; i++) {
+            str +=
+              '<span class="selectedItem">' +
+              selectedFeatures[i].get("NAME") +
+              "</span>";
+          }
+          document.getElementById("selectedInfoContent").innerHTML = str;
+          map.removeInteraction(select_shape);
+        });
+      };
+
+      /**
+       * 圈选要素
+       * @param vectorLayer 要素所在的图层
+       * @param geometry 绘制的圆形
+       * @return 符合条件的要素组成的数组
+       * */
+      var circleSelect = function(vectorLayer, geometry) {
+        var selectedFeatures = [];
+        var center = geometry.getCenter();
+        var radius = geometry.getRadius();
+        var extent = geometry.getExtent();
+        var features = vectorLayer.getSource().getFeaturesInExtent(extent); // 查找在圆圈内的features, 先缩小feature的范围
+
+        for (var i = 0; i < features.length; i++) {
+          var newCoords = features[i].getGeometry().getCoordinates();
+          // 判断是否在圆圈内
+          if (newCoords && pointInsideCircle(newCoords, center, radius)) {
+            features[i].setStyle(selectedStyle);
+            selectedFeatures.push(features[i]);
+          }
+        }
+        return selectedFeatures;
+      };
+
+      /**
+       * 多边形选择要素
+       * @param vectorLayer 要素所在的图层
+       * @param geometry 绘制的圆形
+       * @return 符合条件的要素组成的数组
+       * */
+      var polygonSelect = function(vectorLayer, geometry) {
+        var selectedFeatures = [];
+        var extent = geometry.getExtent();
+        var cooridnates = geometry.getCoordinates()[0];
+        var features = vectorLayer.getSource().getFeaturesInExtent(extent); //先缩小feature的范围
+
+        for (var i = 0; i < features.length; i++) {
+          var newCoords = features[i].getGeometry().getCoordinates();
+          if (newCoords && insidePolygon(cooridnates, newCoords)) {
+            features[i].setStyle(selectedStyle);
+            selectedFeatures.push(features[i]);
+          }
+        }
+        return selectedFeatures;
+      };
+
+      /**
+       *  判断一个点是否在多边形内部
+       *  @param points 多边形坐标集合
+       *  @param testPoint 测试点坐标
+       *  返回true为真，false为假
+       *  */
+      function insidePolygon(points, testPoint) {
+        var x = testPoint[0];
+        var y = testPoint[1];
+        var inside = false;
+
+        for (var i = 0, j = points.length - 1; i < points.length; j = i++) {
+          var xi = points[i][0];
+          var yi = points[i][1];
+          var xj = points[j][0];
+          var yj = points[j][1];
+
+          var intersect =
+            yi > y != yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      /**
+       *  判断一个点是否在圆的内部
+       *  @param point  测试点坐标
+       *  @param circle 圆心坐标
+       *  @param r 圆半径
+       *  返回true为真，false为假
+       *  */
+      function pointInsideCircle(point, circle, r) {
+        if (r === 0) return false;
+        var dx = circle[0] - point[0];
+        var dy = circle[1] - point[1];
+        return dx * dx + dy * dy <= r * r;
+      }
+    </script>
+  </body>
+</html>
